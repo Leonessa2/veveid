@@ -4,7 +4,10 @@ import { NB_PAIRES, FENETRE_MIN as FENETRE_DECOUVERTE } from './decouverte.ts';
 import { PRIX_MIN, PRIX_MAX, NB_CIBLES, FENETRE_MIN } from './defi.ts';
 import type { Avoir, Compte } from './avoirs.ts';
 import { CHAMP_PIEGE, sceau } from './robots.ts';
-import { DELAI_GRACE_JOURS } from './avoirs.ts';
+// 🔴 LOT 194 — la liste des paliers vendus est IMPORTÉE, pas recopiée : une
+// seconde liste dans le gabarit divergerait au premier ajout, et c'est la page
+// qui aurait tort sans que rien ne rougisse.
+import { DELAI_GRACE_JOURS, PALIERS_VENDUS } from './avoirs.ts';
 import type { Forme, LigneSite, Activite, Trouvaille } from './admin.ts';
 
 /**
@@ -527,7 +530,7 @@ const blocRecherche = (t?: Trouvaille) => {
       c.verifie_le ? ` <span class="doux">(${echapper(c.verifie_le.slice(0, 10))})</span>` : ''}<br>
         ${c.indice_email ? `indice courriel : <b>${echapper(c.indice_email)}</b><br>` : ''}
         ${c.indice_wallet ? `indice portefeuille : <b>${echapper(c.indice_wallet)}</b><br>` : ''}
-        ${c.abonne_jusqu_a ? `abonné jusqu’au ${echapper(c.abonne_jusqu_a.slice(0, 10))}<br>` : ''}
+        ${c.abonne_jusqu_a ? `abonné jusqu’au ${echapper(c.abonne_jusqu_a.slice(0, 10))}${c.palier ? ` — <strong>${echapper(c.palier)}</strong>` : ''}${new Date(c.abonne_jusqu_a) <= new Date() ? ' <em>(expiré)</em>' : ''}<br>` : ''}
         ${c.en_grace ? `⚠️ suppression demandée le ${echapper(c.en_grace.slice(0, 10))}` : ''}</p>
       ${/* 🔴 LOT 122 — LE SEUL GESTE QUI ÉCRIT DE TOUTE CETTE PAGE.
             ⭐ Il est POSÉ PAR COMPTE, et pas une fois en haut de page : un
@@ -539,8 +542,22 @@ const blocRecherche = (t?: Trouvaille) => {
             trompe pas.
             ⛔ `min`/`max` côté HTML NE PROTÈGE RIEN — c'est du confort. La
             borne qui compte est dans `server.ts`, et elle y est. */ ''}
+      ${/* 🔴 LOT 194 — LE PALIER SE CHOISIT, IL NE SE TAPE PAS.
+            ⭐ Une liste FERMÉE, remplie depuis `PALIERS_VENDUS` : ce qu'on ne
+            tape pas ne se trompe pas, et le jour où un quatrième palier
+            s'ajoute, il apparaît ici sans qu'on touche à cette page.
+            ⚠️ Le pré-sélectionné est CE QUE LA PERSONNE A DÉJÀ, quand elle a
+            déjà quelque chose : le geste courant est de RECONDUIRE, et un
+            formulaire qui repart de « crevette » ferait redescendre un whale
+            d'un clic distrait.
+            ⛔ La liste HTML NE PROTÈGE RIEN — un POST direct envoie ce qu'il
+            veut. Le refus qui compte est dans `accorderAbonnement()`, et il
+            y est. */ ''}
       <form method="post" action="/admin/abonner" class="rang" style="margin-top:10px;gap:8px">
         <input type="hidden" name="ref" value="${echapper(c.ref)}">
+        <select name="palier" aria-label="palier accordé" style="width:130px">
+          ${PALIERS_VENDUS.map((niv) => `<option value="${echapper(niv)}"${(c.palier || 'crevette') === niv ? ' selected' : ''}>${echapper(niv)}</option>`).join('')}
+        </select>
         <input name="jours" type="number" min="1" max="400" value="30"
                style="width:90px" aria-label="jours d’abonnement">
         <button class="principal">Accorder</button>

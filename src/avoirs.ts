@@ -119,6 +119,10 @@ export interface Compte {
   id: string; site: string; wallet: string | null; email: string | null;
   verifie: number; verifie_le: string | null;
   cree_le: string; abonne_jusqu_a: string | null; supprime_le: string | null;
+  /** 🔴 LOT 194 — CE QUI A ÉTÉ ACHETÉ. `null` sur un compte gratuit, et sur
+   *  les abonnements d'avant ce lot que la migration n'aurait pas atteints :
+   *  `paliDe()` retombe alors sur `crevette`, le seul palier qui existait. */
+  palier: string | null;
 }
 
 /**
@@ -163,9 +167,43 @@ export const lireCompteParEmail = (site: string, email: string) =>
   q1<Compte>('SELECT * FROM comptes WHERE site=? AND email=?',
     normaliserSite(site), email.trim().toLowerCase());
 
-/** ⭐ Le palier, en un seul endroit. Voir `access.mjs` côté veve-sites. */
+/**
+ * ⭐⭐⭐ LES TROIS PALIERS QUI SE VENDENT, ÉCRITS ICI ET NULLE PART AILLEURS.
+ * ⛔ `visitor`, `free` et `member` n'y sont PAS, et ce n'est pas un oubli :
+ *    ils ne s'achètent pas, ils se déduisent. Les mélanger permettrait
+ *    d'« accorder un abonnement member », c'est-à-dire de vendre le gratuit.
+ * ⚠️ Les noms doivent rester ceux de `PALIERS` dans `access.mjs` (veve-sites).
+ *    Ce service dit le palier, l'autre décide ce qu'il ouvre : un nom qui
+ *    diverge ne lèverait rien, il refuserait juste tout, en silence.
+ */
+export const PALIERS_VENDUS = ['crevette', 'langouste', 'whale'] as const;
+export const palierVendu = (p: unknown): p is typeof PALIERS_VENDUS[number] =>
+  typeof p === 'string' && (PALIERS_VENDUS as readonly string[]).includes(p);
+
+/**
+ * ⭐ Le palier, en un seul endroit. Voir `access.mjs` côté veve-sites.
+ *
+ * 🔴🔴 LOT 194 — TROIS ÉTATS, ET L'ORDRE DES QUESTIONS COMPTE :
+ *   1. pas de compte           → `visitor`
+ *   2. compte sans abonnement  → `member` (gratuit) — ⛔ la colonne `palier`
+ *      n'est PAS regardée : un abonnement expiré garde ce qu'il a acheté en
+ *      mémoire, mais il ne l'OUVRE plus. Lire `palier` avant `estAbonne()`
+ *      rendrait l'abonnement éternel, et personne ne le verrait avant le
+ *      premier non-renouvellement.
+ *   3. abonnement en cours     → ce qui a été acheté, `crevette` par repli.
+ *
+ * ⚠️ LE REPLI N'EST PAS DE LA PRUDENCE DÉCORATIVE : avant ce lot, un
+ *    abonnement ne pouvait être que `crevette`. Sans lui, la migration aurait
+ *    fait TOMBER à `member` tous ceux qui avaient déjà payé — une régression
+ *    invisible, du côté des gens qui ont donné de l'argent.
+ * ⛔ Et il valide le contenu : une valeur inconnue en base (faute de frappe,
+ *    palier retiré du catalogue) retombe sur `crevette`, jamais sur elle-même.
+ *    Une base ne dicte pas ce que le code accepte.
+ */
 export const paliDe = (c: Compte | undefined) =>
-  !c ? 'visitor' : estAbonne(c) ? 'crevette' : 'member';
+  !c ? 'visitor'
+    : !estAbonne(c) ? 'member'
+      : palierVendu(c.palier) ? c.palier : 'crevette';
 
 export const lireCompte = (id: string) => q1<Compte>('SELECT * FROM comptes WHERE id=?', id);
 
@@ -205,13 +243,37 @@ export function poserPortefeuille(compteId: string, wallet: string): void {
 }
 export const estAbonne = (c: Compte) => !!c.abonne_jusqu_a && c.abonne_jusqu_a > now();
 
-export function accorderAbonnement(compteId: string, jours: number): string {
+/**
+ * 🔴 LOT 194 — LE PALIER EST UN TROISIÈME ARGUMENT, ET IL EST FACULTATIF.
+ * ⭐ `= 'crevette'` par défaut : les appelants d'avant ce lot (les tests, et
+ *    la route admin tant qu'elle n'envoyait rien) continuent d'accorder
+ *    exactement ce qu'ils accordaient. Une signature élargie qui casse ses
+ *    appelants est une migration déguisée en amélioration.
+ * ⛔ UN PALIER INCONNU EST REFUSÉ, PAS CORRIGÉ. Écrire « crevette » à la
+ *    place de « crevete » vendrait autre chose que ce qui a été payé, et le
+ *    formulaire d'exploitation n'afficherait aucune différence. On refuse, et
+ *    on le dit — c'est la même règle que les bornes de `jours` : *on exige la
+ *    forme, on ne la devine pas.*
+ * ⚠️ LE DERNIER GESTE DÉCIDE DU PALIER, y compris vers le bas. Accorder 30
+ *    jours de `crevette` à un `whale` en cours prolonge la date ET redescend
+ *    le palier. C'est voulu : un abonnement est ce qu'on vient d'acheter, pas
+ *    le meilleur de ce qu'on a acheté un jour. Le message de retour NOMME le
+ *    palier accordé, pour que le geste soit relisible à l'écran.
+ */
+export function accorderAbonnement(compteId: string, jours: number, palier: string = 'crevette'): string {
   const c = lireCompte(compteId);
   if (!c) return 'Compte inconnu.';
+  if (!palierVendu(palier)) {
+    return `Palier refusé : « ${palier} » ne se vend pas (${PALIERS_VENDUS.join(', ')}).`;
+  }
   const depuis = estAbonne(c) ? new Date(c.abonne_jusqu_a!) : new Date();
   const fin = new Date(depuis.getTime() + jours * 86_400_000).toISOString();
-  run('UPDATE comptes SET abonne_jusqu_a=? WHERE id=?', fin, compteId);
-  return `Abonné jusqu’au ${fin.slice(0, 10)}.`;
+  // ⭐ LES DEUX COLONNES DANS **UN SEUL** `UPDATE`. Deux écritures séparées
+  //   laisseraient, entre elles, un instant où la date est prolongée et le
+  //   palier encore l'ancien — et si la seconde échoue, l'état reste faux
+  //   sans que rien ne le dise.
+  run('UPDATE comptes SET abonne_jusqu_a=?, palier=? WHERE id=?', fin, palier, compteId);
+  return `Abonné ${palier} jusqu’au ${fin.slice(0, 10)}.`;
 }
 
 /** Le jeu note son passage — utile au support, à rien d'autre. */

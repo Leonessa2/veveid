@@ -654,6 +654,15 @@ export const serveur = createServer(async (req, res) => {
             //   contre moi, et c'est le code qui a changé.
             const ref = String(b.get('ref') ?? '');
             const jours = Number(b.get('jours') ?? 0);
+            // 🔴 LOT 194 — LE PALIER VOYAGE AVEC LA DURÉE.
+            // ⭐ `?? 'crevette'` : un formulaire d'avant ce lot, ou un envoi
+            //   qui n'aurait pas le champ, accorde exactement ce qu'il
+            //   accordait avant. ⛔ On ne VALIDE pas ici : `accorderAbonnement`
+            //   refuse elle-même un palier inconnu et le DIT. Deux contrôles de
+            //   la même chose finissent par diverger, et c'est le plus
+            //   permissif qui gagne — c'est déjà écrit trois lignes plus bas
+            //   pour l'existence du compte, et ça vaut pour le palier.
+            const palier = String(b.get('palier') ?? 'crevette');
             let message: string;
             // ⚠️ `Number.isInteger` ET les bornes : `Number('30j')` rend NaN,
             //    `Number('')` rend 0, et `NaN > 0` est faux — mais `NaN` passe
@@ -666,11 +675,13 @@ export const serveur = createServer(async (req, res) => {
               //   et rend « Compte inconnu. » sinon : on ne redouble pas le
               //   contrôle ici. Deux vérifications de la même chose finissent
               //   par diverger, et c'est la plus permissive qui gagne.
-              message = accorderAbonnement(ref, jours);
+              message = accorderAbonnement(ref, jours, palier);
             }
             // ⛔ NI LA RÉFÉRENCE NI LE TERME DANS LA TRACE : on journalise le
             //   FAIT, jamais QUI. Même règle que la recherche au-dessus.
-            console.log(`[admin] abonnement (${jours} j) : ${message}`);
+            // ⭐ LE PALIER ENTRE DANS LA TRACE, LA RÉFÉRENCE TOUJOURS PAS :
+            //   « quoi » et « combien de temps » se journalisent, « qui » non.
+            console.log(`[admin] abonnement (${palier}, ${jours} j) : ${message}`);
             // ⚠️ On ne réaffiche PAS le résultat de recherche : on n'a plus le
             //   terme, et c'est voulu. La page revient à son état neutre avec
             //   le message — une page d'exploitation qui garde une identité à

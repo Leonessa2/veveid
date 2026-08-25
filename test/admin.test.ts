@@ -282,3 +282,144 @@ test('⭐ la page de recherche PORTE le formulaire d’abonnement', async () => 
   assert.ok(corps.includes('/admin/abonner'), 'le formulaire est là');
   assert.ok(/name="ref" value="[^"]+"/.test(corps), 'et il porte une référence');
 });
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 🔴🔴🔴 LOT 194 (25/08/2026) — LA BASE APPREND À DIRE **LEQUEL**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Preda vend trois niveaux depuis `/offre/` (Shrimp 6 $, Lobster 18 $, Whale
+ * 36 $/mois). Cette base ne savait dire qu'une DATE : `paliDe()` rendait donc
+ * `crevette` pour tout abonné, et deux des trois tarifs étaient invendables —
+ * pas par un réglage manquant, mais parce qu'il n'existait aucune case où
+ * écrire ce qui avait été acheté.
+ *
+ * ⭐⭐ CE BANC PART D'UNE BASE **D'AVANT** : le `before()` de ce fichier crée
+ * `comptes` sans `site` NI `palier`. Tout ce qui suit s'exécute donc sur une
+ * base migrée pour de vrai, pas sur un schéma neuf qui n'existe nulle part.
+ */
+test('🔴 LOT 194 — la migration ajoute la colonne sur une base d’avant', async () => {
+  const { q1 } = await import('../src/db.ts');
+  const colonnes = (await import('../src/admin.ts')).forme().colonnes.map((c) => c.nom);
+  assert.ok(colonnes.includes('palier'), '⛔ la colonne palier doit exister après migration');
+  // ⭐ ET LA LIGNE D'AVANT A ÉTÉ RATTRAPÉE : « juillet » a été abonné par les
+  //   tests précédents de ce fichier, donc il porte une date — la migration
+  //   n'a PAS pu le voir (elle a tourné au démarrage, avant ces gestes), mais
+  //   `accorderAbonnement` a écrit son palier. Les deux chemins mènent au même
+  //   état, et c'est ce qu'on vérifie.
+  const c = q1<{ palier: string | null }>('SELECT palier FROM comptes WHERE id=?', 'juillet');
+  assert.equal(c?.palier, 'crevette', 'un abonnement accordé sans palier reste crevette');
+});
+
+test('⭐ LOT 194 — le geste accorde le palier DEMANDÉ, pas crevette par défaut', async () => {
+  const cookie = await ouvrirSession();
+  const av = await import('../src/avoirs.ts');
+
+  const r = await poste('/admin/abonner', 'ref=juillet&jours=30&palier=whale', cookie);
+  assert.equal(r.status, 200);
+  assert.equal(av.paliDe(av.lireCompte('juillet')), 'whale', 'le palier demandé est celui qui s’ouvre');
+  assert.ok((await r.text()).includes('whale'), 'et le message NOMME ce qui a été accordé');
+
+  // ⛔ Y COMPRIS VERS LE BAS. Un abonnement est ce qu'on vient d'acheter, pas
+  //   le meilleur de ce qu'on a acheté un jour. Sans ce contrôle, une
+  //   implémentation « on ne redescend jamais » passerait — et le jour où
+  //   quelqu'un rétrograde de whale à crevette, il garderait tout.
+  await poste('/admin/abonner', 'ref=juillet&jours=30&palier=crevette', cookie);
+  assert.equal(av.paliDe(av.lireCompte('juillet')), 'crevette', 'le dernier geste décide, même à la baisse');
+});
+
+test('⛔ LOT 194 — un palier qui ne se vend pas est REFUSÉ, pas corrigé', async () => {
+  const cookie = await ouvrirSession();
+  const av = await import('../src/avoirs.ts');
+  const avantD = av.lireCompte('juillet')!.abonne_jusqu_a;
+  const avantP = av.lireCompte('juillet')!.palier;
+
+  // ⭐ `member` et `free` sont dans la liste : ce sont de VRAIS paliers du
+  //   site, mais ils ne s'ACHÈTENT pas. Les accepter reviendrait à vendre le
+  //   gratuit — et à écrire dans `palier` une valeur que `paliDe()` ne saurait
+  //   pas relire, donc à fabriquer un abonné fantôme.
+  for (const mauvais of ['crevete', 'CREVETTE', 'member', 'free', 'visitor', '', 'whale ']) {
+    const r = await poste('/admin/abonner',
+      `ref=juillet&jours=30&palier=${encodeURIComponent(mauvais)}`, cookie);
+    assert.equal(r.status, 200, mauvais);
+    assert.equal(av.lireCompte('juillet')!.abonne_jusqu_a, avantD, `⛔ « ${mauvais} » ne prolonge RIEN`);
+    assert.equal(av.lireCompte('juillet')!.palier, avantP, `⛔ « ${mauvais} » n’écrase RIEN`);
+  }
+  // ⭐ Et le refus se DIT — un geste sans effet ni message est un geste dont on
+  //   croit qu'il a marché.
+  const corps = await (await poste('/admin/abonner', 'ref=juillet&jours=30&palier=crevete', cookie)).text();
+  assert.ok(corps.includes('Palier refusé'), 'le message nomme le refus');
+});
+
+test('⛔ LOT 194 — un abonnement EXPIRÉ retombe à member, quel que soit le palier acheté', async () => {
+  const { run } = await import('../src/db.ts');
+  const av = await import('../src/avoirs.ts');
+  // ⚠️ On écrit un état IMPOSSIBLE à atteindre par le geste (date passée +
+  //    palier haut) : c'est exactement ce que produira le temps qui passe, et
+  //    aucun test qui n'utilise que la route ne peut l'atteindre.
+  run("UPDATE comptes SET abonne_jusqu_a='2020-01-01T00:00:00.000Z', palier='whale' WHERE id=?", 'juillet');
+  assert.equal(av.paliDe(av.lireCompte('juillet')), 'member',
+    '⛔ lire le palier AVANT la date rendrait tout abonnement éternel');
+  // ⭐ Mais la colonne GARDE la trace : « il a acheté whale » et « ça ne lui
+  //   ouvre plus rien » sont deux faits, et la page d'exploitation a les deux.
+  assert.equal(av.lireCompte('juillet')!.palier, 'whale', 'la trace de l’achat survit à l’expiration');
+});
+
+test('⛔ LOT 194 — une valeur inconnue EN BASE retombe sur crevette, pas sur elle-même', async () => {
+  const { run } = await import('../src/db.ts');
+  const av = await import('../src/avoirs.ts');
+  const demain = new Date(Date.now() + 86_400_000).toISOString();
+  run('UPDATE comptes SET abonne_jusqu_a=?, palier=? WHERE id=?', demain, 'baleine-bleue', 'juillet');
+  assert.equal(av.paliDe(av.lireCompte('juillet')), 'crevette',
+    '⛔ une base ne dicte pas ce que le code accepte');
+  run('UPDATE comptes SET palier=NULL WHERE id=?', 'juillet');
+  assert.equal(av.paliDe(av.lireCompte('juillet')), 'crevette',
+    '⭐ et le repli protège les abonnements d’avant le lot 194');
+});
+
+test('⭐ LOT 194 — le formulaire propose les TROIS paliers, et pas un de plus', async () => {
+  const cookie = await ouvrirSession();
+  const av = await import('../src/avoirs.ts');
+  const corps = await (await poste('/admin/chercher', `q=${encodeURIComponent(W)}`, cookie)).text();
+  assert.ok(corps.includes('name="palier"'), 'le sélecteur est là');
+  for (const niv of av.PALIERS_VENDUS) {
+    assert.ok(corps.includes(`value="${niv}"`), `« ${niv} » est proposé`);
+  }
+  // ⛔ LE TÉMOIN DANS L'AUTRE SENS : sans lui, un sélecteur qui proposerait
+  //    aussi `member` passerait les six lignes ci-dessus.
+  const options = (corps.match(/<option value="[^"]*"/g) || []).length;
+  assert.equal(options, av.PALIERS_VENDUS.length, `⛔ ${options} option(s) pour ${av.PALIERS_VENDUS.length} paliers vendus`);
+  for (const interdit of ['value="member"', 'value="free"', 'value="visitor"']) {
+    assert.ok(!corps.includes(interdit), `⛔ ${interdit} ne doit PAS être vendable`);
+  }
+});
+
+/**
+ * 🔬🔴🔴 CE CONTRÔLE EXISTE PARCE QU'UNE INJECTION N'A PAS MORDU.
+ *
+ * En jugeant ce banc, j'ai débranché `palier` de la recherche (`admin.ts`
+ * rendait `null` au lieu de la colonne) : les six contrôles ci-dessus sont
+ * restés VERTS. Ils éprouvaient le moteur et la LISTE du sélecteur — jamais la
+ * valeur qui remonte jusqu'à l'écran.
+ *
+ * ⭐⭐⭐ ET LE DÉFAUT QU'ILS LAISSAIENT PASSER EST EXACTEMENT CELUI QUE LE
+ * COMMENTAIRE DE `vues.ts` PRÉTEND ÉVITER : sans palier remonté, la page ne
+ * dit pas ce que la personne a acheté, ET le sélecteur repart de « crevette ».
+ * Le geste courant — reconduire un abonnement — ferait alors REDESCENDRE un
+ * whale d'un seul clic, sans un message, sans une erreur.
+ * ⇒ *Une injection qui ne mord pas accuse le jeu d'essai, pas le code.*
+ */
+test('⛔ LOT 194 — la page d’exploitation MONTRE le palier acheté et le pré-sélectionne', async () => {
+  const cookie = await ouvrirSession();
+  await poste('/admin/abonner', 'ref=juillet&jours=30&palier=whale', cookie);
+  const corps = await (await poste('/admin/chercher', `q=${encodeURIComponent(W)}`, cookie)).text();
+
+  // ⭐ LE PALIER EST ÉCRIT DANS LA PAGE, à côté de la date.
+  assert.ok(/abonné jusqu[^<]*whale|whale[^<]*<\/strong>/i.test(corps),
+    '⛔ la page doit dire LEQUEL, pas seulement « abonné »');
+  // ⭐ ET LE SÉLECTEUR PART DE LÀ. C'est la moitié qui protège d'une
+  //   rétrogradation par inadvertance, et c'est elle que l'injection visait.
+  assert.ok(/<option value="whale" selected/.test(corps),
+    '⛔ reconduire doit reconduire, pas redescendre à crevette');
+  assert.ok(!/<option value="crevette" selected/.test(corps),
+    '⛔ un seul palier pré-sélectionné, et c’est celui qu’on a');
+});

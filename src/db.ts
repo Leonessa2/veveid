@@ -408,6 +408,49 @@ COMMIT;`);
     journal.push(`colonne site ajoutee (${avant} compte(s) rattache(s) a « ${defaut} »)`);
   }
 
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * 🔴🔴🔴 LOT 194 (25/08/2026) — LA BASE APPREND À DIRE **LEQUEL**
+   * ═══════════════════════════════════════════════════════════════════════
+   * Preda vend trois niveaux (Shrimp 6 $, Lobster 18 $, Whale 36 $/mois) et
+   * la page `/offre/` les affiche depuis des semaines. Or cette base ne
+   * savait dire qu'UNE chose : `abonne_jusqu_a`, une date. `paliDe()` rendait
+   * donc `crevette` pour tout abonné, et `langouste` et `whale` n'avaient
+   * AUCUN chemin d'existence — pas un réglage manquant : aucune case où
+   * écrire ce qui a été acheté. Deux des trois tarifs étaient invendables.
+   *
+   * ⭐⭐ ON REMPLIT LES LIGNES EXISTANTES, ET C'EST UN CHOIX ARGUMENTÉ.
+   * Le repli de `paliDe()` (« abonné sans palier ⇒ crevette ») suffirait à ne
+   * rien casser. Mais une colonne vide devient AMBIGUË dès demain : elle
+   * dirait à la fois « abonnement d'avant le lot 194 » et « paiement qui a
+   * oublié d'écrire son palier ». On écrit donc ce qu'on SAIT — à l'époque,
+   * un abonnement ne pouvait être que `crevette` — et le repli reste en
+   * ceinture, pour les lignes qu'un futur appelant oublierait.
+   * ⛔ Seules les lignes qui ont une date d'abonnement sont touchées : un
+   *    compte gratuit n'a pas de palier acheté, et lui en écrire un ferait
+   *    croire à un paiement qui n'a jamais eu lieu.
+   *
+   * 🔴 ON RELIT LES COLONNES, comme le bloc `site` juste au-dessus et pour la
+   *    même raison : `a()` referme un instantané pris AVANT l'échange de
+   *    table du lot 89. Un instrument branché en amont mesure le passé.
+   */
+  const avantPalier = (db.prepare('PRAGMA table_info(comptes)').all() as Array<{ name: string }>).map((c) => c.name);
+  if (!avantPalier.includes('palier')) {
+    const total = (db.prepare('SELECT COUNT(*) AS n FROM comptes').get() as { n: number }).n;
+    db.exec('ALTER TABLE comptes ADD COLUMN palier TEXT');
+    // ⚠️ `abonne_jusqu_a IS NOT NULL` et PAS « abonnement EN COURS » : un
+    //    abonnement expiré a quand même été acheté, et le jour où Preda le
+    //    prolonge, il doit repartir de ce qu'il était — pas d'un vide.
+    const r = db.prepare("UPDATE comptes SET palier='crevette' WHERE abonne_jusqu_a IS NOT NULL").run();
+    // ⛔ ON COMPTE APRÈS, SUR LA BASE, PAS SUR CE QU'ON CROIT AVOIR ÉCRIT.
+    //    Un `UPDATE` qui ne mord pas ne lève rien : il rend « 0 modifiée » et
+    //    la migration passerait pour faite. Même leçon que le comptage
+    //    avant/après du lot 89, trente lignes plus haut.
+    const sansPalier = (db.prepare("SELECT COUNT(*) AS n FROM comptes WHERE abonne_jusqu_a IS NOT NULL AND (palier IS NULL OR palier='')").get() as { n: number }).n;
+    if (sansPalier) throw new Error(`migration palier : ${sansPalier} abonnement(s) sans palier apres l'UPDATE — refus d'avancer`);
+    journal.push(`colonne palier ajoutee (${total} compte(s) en base, ${r.changes} abonnement(s) rattache(s) a « crevette »)`);
+  }
+
   const dejaLa = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>).map((x) => x.name));
   /**
    * 🔴 LES ANCIENS INDEX GLOBAUX DOIVENT PARTIR, PAS COHABITER.

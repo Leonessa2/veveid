@@ -193,6 +193,13 @@ export interface Trouvaille {
     site: string; cree_le: string; verifie: boolean; verifie_le: string | null;
     a_un_portefeuille: boolean; indice_email: string | null; indice_wallet: string | null;
     abonne_jusqu_a: string | null; en_grace: string | null;
+    /** 🔴 LOT 194 — CE QUI A ÉTÉ ACHETÉ, tel qu'écrit en base (`null` si
+     *  rien). ⛔ Ce n'est PAS le palier EFFECTIF : un abonnement expiré garde
+     *  sa valeur ici alors que `paliDe()` rend déjà `member`. La page
+     *  d'exploitation a besoin des deux — « il a acheté whale » et « ça ne
+     *  lui ouvre plus rien » sont deux faits, et les confondre ferait
+     *  reconduire un abonnement qu'on croit encore actif. */
+    palier: string | null;
   }[];
 }
 
@@ -221,12 +228,16 @@ export function chercher(terme: string): Trouvaille {
     id: string;
     site: string; cree_le: string; verifie: number; verifie_le: string | null;
     wallet: string | null; email: string | null; abonne_jusqu_a: string | null;
-    supprime_le: string | null;
+    supprime_le: string | null; palier: string | null;
   }>(
+    // ⚠️ LOT 194 — `palier` ajouté aux DEUX branches. Ne l'ajouter qu'à l'une
+    //    aurait rendu la colonne vide pour une recherche sur deux, sans une
+    //    seule erreur : la page aurait dit « aucun palier » à qui cherche par
+    //    portefeuille et le bon à qui cherche par e-mail.
     quoi === 'email'
-      ? 'SELECT id, site, cree_le, verifie, verifie_le, wallet, email, abonne_jusqu_a, supprime_le '
+      ? 'SELECT id, site, cree_le, verifie, verifie_le, wallet, email, abonne_jusqu_a, supprime_le, palier '
         + 'FROM comptes WHERE email=? ORDER BY site'
-      : 'SELECT id, site, cree_le, verifie, verifie_le, wallet, email, abonne_jusqu_a, supprime_le '
+      : 'SELECT id, site, cree_le, verifie, verifie_le, wallet, email, abonne_jusqu_a, supprime_le, palier '
         + 'FROM comptes WHERE wallet=? ORDER BY site',
     t);
 
@@ -265,6 +276,7 @@ export function chercher(terme: string): Trouvaille {
       indice_wallet: quoi === 'email' ? masquerWallet(c.wallet) : null,
       abonne_jusqu_a: c.abonne_jusqu_a,
       en_grace: c.supprime_le,
+      palier: c.palier,
     })),
   };
 }
