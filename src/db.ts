@@ -227,6 +227,40 @@ CREATE TABLE IF NOT EXISTS reglages (
   cle TEXT PRIMARY KEY, valeur TEXT NOT NULL, maj TEXT NOT NULL
 );
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 🔴🔴🔴 LOT 198 — LES PAIEMENTS DÉJÀ HONORÉS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ⭐⭐⭐ CETTE TABLE N'EXISTE QUE POUR UNE CHOSE : NE PAS CRÉDITER DEUX FOIS.
+-- Un prestataire de paiement REJOUE ses notifications — c'est normal, c'est
+-- même une garantie : si notre serveur n'a pas répondu, il rappelle. Sans
+-- garde, un rejeu ajoute 30 jours de plus, et un incident réseau offre
+-- silencieusement six mois à quelqu'un qui a payé un mois.
+--
+-- ⛔ LA RÉFÉRENCE EST LA CLÉ PRIMAIRE, ET C'EST TOUT LE MÉCANISME. On ne
+--    vérifie pas son existence avant d'insérer : deux notifications simultanées
+--    passeraient toutes deux le test avant que l'une écrive. C'est la base qui
+--    refuse le doublon, en une seule opération indivisible.
+-- ⚠️ On garde ce qui a été accordé (durée, palier) : sans ça, un rejeu refusé
+--    ne saurait pas dire CE QU'IL avait déjà accordé, et on ne pourrait pas
+--    distinguer un rejeu normal d'une collision de références.
+-- ⛔ AUCUN MONTANT, AUCUN MOYEN DE PAIEMENT, AUCUNE ADRESSE : ce service ne
+--    tient pas de comptabilité, il ouvre des portes. Ce qui a été payé et
+--    comment vit chez le prestataire, qui est fait pour ça.
+-- ⛔⛔ ET AUCUN ACCENT GRAVE DANS CE BLOC : tout ce fichier SQL est un gabarit
+--    de chaîne JavaScript, que l'accent grave FERME. Ma première version en
+--    citait un autour du nom de la colonne : la base entière cessait de se
+--    charger, avec l'erreur « Expected a semicolon » pointant vingt lignes
+--    plus bas. Troisième fois aujourd'hui qu'une syntaxe citée dans ce qui
+--    l'utilise casse la compilation. On décrit, on ne cite pas.
+CREATE TABLE IF NOT EXISTS paiements (
+  reference TEXT PRIMARY KEY,
+  compte_id TEXT NOT NULL,
+  jours INTEGER NOT NULL,
+  palier TEXT NOT NULL,
+  ts TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_paiements_compte ON paiements(compte_id);
+
 -- ⭐⭐ LES LIENS DE CONNEXION (lot 89).
 --
 -- 🔴 ON N'ENREGISTRE PAS LE JETON, ON ENREGISTRE SON EMPREINTE. Le jeton

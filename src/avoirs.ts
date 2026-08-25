@@ -276,6 +276,76 @@ export function accorderAbonnement(compteId: string, jours: number, palier: stri
   return `Abonné ${palier} jusqu’au ${fin.slice(0, 10)}.`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴🔴🔴 LOT 198 — HONORER UN PAIEMENT, UNE SEULE FOIS
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * Accorde l'abonnement correspondant à un paiement, en refusant les rejeux.
+ *
+ * ⭐⭐⭐ POURQUOI CETTE FONCTION EXISTE À CÔTÉ DE `accorderAbonnement()` ET NE
+ * LA REMPLACE PAS : le geste d'exploitation (Preda dans `/admin`) et le geste
+ * automatique (une notification de paiement) n'ont PAS le même risque. Un
+ * humain qui clique deux fois le voit ; un prestataire qui rejoue sa
+ * notification ne le voit pas, et c'est NORMAL qu'il rejoue — s'il n'a pas
+ * reçu notre réponse, il rappelle. C'est même sa garantie de fiabilité.
+ * ⇒ Sans garde, un incident réseau offre six mois à qui a payé un mois.
+ *
+ * ⛔ ON N'INTERROGE PAS LA BASE AVANT D'ÉCRIRE. La version naïve — « existe-t-il
+ *    déjà cette référence ? sinon, accorde » — laisse passer deux notifications
+ *    SIMULTANÉES : les deux lisent « non », les deux créditent. C'est l'INSERT
+ *    qui refuse, en une seule opération indivisible, parce que `reference` est
+ *    la clé primaire. *Une vérification suivie d'une écriture n'est pas
+ *    atomique ; une écriture qui échoue, si.*
+ *
+ * ⭐ ET L'ORDRE EST DÉLIBÉRÉ : on inscrit le paiement AVANT d'accorder. Si le
+ *   service s'arrête entre les deux, la personne n'a pas son abonnement mais le
+ *   rejeu du prestataire sera refusé — on aura pris l'argent sans ouvrir la
+ *   porte, ce qui se répare en un clic depuis `/admin`. L'ordre inverse
+ *   accorderait sans trace, et CHAQUE rejeu rajouterait un mois : une panne
+ *   invisible qui grossit toute seule. *Entre deux pannes, on choisit celle qui
+ *   se voit et qui se répare.*
+ *
+ * @param reference l'identifiant du paiement chez le prestataire — opaque ici
+ * @returns `{ ok, message, rejeu }` — `rejeu: true` n'est PAS une erreur
+ */
+export function honorerPaiement(
+  reference: string, compteId: string, jours: number, palier: string,
+): { ok: boolean; message: string; rejeu: boolean } {
+  const ref = String(reference ?? '').trim();
+  // ⛔ Une référence vide n'est pas une référence : elle rendrait TOUS les
+  //    paiements identiques, donc tous les seconds refusés comme des rejeux.
+  if (!ref || ref.length > 200) {
+    return { ok: false, message: 'Référence de paiement absente ou trop longue.', rejeu: false };
+  }
+  if (!palierVendu(palier)) {
+    return { ok: false, message: `Palier refusé : « ${palier} » ne se vend pas.`, rejeu: false };
+  }
+  if (!Number.isInteger(jours) || jours < 1 || jours > 400) {
+    return { ok: false, message: 'Durée refusée : un entier de 1 à 400 jours.', rejeu: false };
+  }
+  // ⭐ Le compte est vérifié ICI, avant d'inscrire quoi que ce soit : inscrire
+  //   un paiement pour un compte inconnu créerait une référence consommée que
+  //   plus rien ne pourrait honorer, même après correction.
+  if (!lireCompte(compteId)) return { ok: false, message: 'Compte inconnu.', rejeu: false };
+
+  try {
+    run('INSERT INTO paiements (reference, compte_id, jours, palier, ts) VALUES (?,?,?,?,?)',
+      ref, compteId, jours, palier, now());
+  } catch {
+    // ⭐ UN REJEU N'EST PAS UNE ERREUR, et la réponse doit le dire clairement :
+    //   un prestataire qui reçoit une erreur RÉESSAIE, indéfiniment. On répond
+    //   « c'est déjà fait », il arrête. ⛔ Répondre « erreur » ici fabriquerait
+    //   la boucle qu'on cherche à éviter.
+    const d = q1<{ jours: number; palier: string }>(
+      'SELECT jours, palier FROM paiements WHERE reference=?', ref);
+    return {
+      ok: true, rejeu: true,
+      message: d ? `Paiement déjà honoré (${d.palier}, ${d.jours} j).` : 'Paiement déjà honoré.',
+    };
+  }
+  return { ok: true, rejeu: false, message: accorderAbonnement(compteId, jours, palier) };
+}
+
 /** Le jeu note son passage — utile au support, à rien d'autre. */
 export const noterAcces = (compteId: string, jeu: string) =>
   run('INSERT INTO acces (compte_id, jeu, ts) VALUES (?,?,?)', compteId, jeu, now());

@@ -160,6 +160,41 @@ export function controlerDemarrage(): Constat[] {
     });
   }
 
+  /**
+   * 🔴🔴 LOT 198 — LA CAISSE, ET POURQUOI SON ABSENCE N'EST **PAS** UNE ALERTE.
+   *
+   * ⭐⭐⭐ `ID_CAISSE` manquante est l'etat NORMAL tant qu'aucun paiement n'est
+   * branche : la route `/api/abonner` se comporte alors comme une adresse qui
+   * n'existe pas. La declarer « attention » ferait crier le demarrage tous les
+   * jours pour une porte qu'on n'a pas encore voulu ouvrir — et un constat qui
+   * crie sans raison finit par ne plus etre lu, ce qui rend muets ceux qui
+   * comptent. *Un avertissement permanent n'avertit plus.*
+   *
+   * ⛔ MAIS LE SILENCE COMPLET SERAIT PIRE DANS L'AUTRE SENS : le jour ou Preda
+   * branchera un prestataire, il aura besoin de savoir si la variable est bien
+   * arrivee — et une porte fermee est INDISCERNABLE d'une porte mal nommee vue
+   * du dehors (404 dans les deux cas, delibérement). C'est exactement le piege
+   * des trois causes d'`ADMIN_TOKEN` documente juste en dessous.
+   * ⇒ On l'annonce en « ok », des deux cotes : presente ou absente, on le DIT.
+   */
+  if (process.env.ID_CAISSE) {
+    c.push({
+      gravite: 'ok',
+      titre: 'ID_CAISSE posee : la caisse peut accorder des abonnements',
+      detail: "POST /api/abonner accepte les notifications de paiement du site marchand. "
+        + "⛔ Cette valeur est DISTINCTE d'ID_SERVICE, et elle doit le rester : ID_SERVICE "
+        + "est partage avec les jeux, et un jeu ne doit pas pouvoir s'offrir un abonnement.",
+    });
+  } else {
+    c.push({
+      gravite: 'ok',
+      titre: "ID_CAISSE absente : aucun paiement ne peut ouvrir de palier",
+      detail: "C'est l'etat normal tant qu'aucun prestataire n'est branche : /api/abonner "
+        + "repond comme une adresse inconnue. Les abonnements s'accordent a la main depuis "
+        + "/admin. Poser cette valeur (differente d'ID_SERVICE) ouvre la porte automatique.",
+    });
+  }
+
   // ── 2 bis. LE JETON D'EXPLOITATION (lot 108) ─────────────────────────
   /**
    * 🔴🔴 TROIS CAUSES, UN SEUL SYMPTOME — ET C'EST POUR CA QUE CE CONSTAT

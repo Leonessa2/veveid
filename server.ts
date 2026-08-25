@@ -26,6 +26,8 @@ import {
   //   l'accompagne : la page transporte la QUESTION (site + terme), pas un
   //   identifiant interne.
   purgerComptes, accorderAbonnement,
+  // 🔴 LOT 198 — la porte de la caisse, avec sa garde contre les rejeux.
+  honorerPaiement,
 } from './src/avoirs.ts';
 import { demander, consommer, purgerLiens, DUREE_MIN } from './src/lien_magique.ts';
 import {
@@ -447,6 +449,70 @@ export const serveur = createServer(async (req, res) => {
         const bilan = demanderSuppression(e.compte);
         if (bilan.ok) revoquerTout(e.compte);
         return json(res, bilan);
+      }
+
+      /**
+       * ═══════════════════════════════════════════════════════════════
+       * 🔴🔴🔴 LOT 198 — LA PORTE DE LA CAISSE
+       * ═══════════════════════════════════════════════════════════════
+       * Preda, 25/08 : « les deux, dans cet ordre » — d'abord le déblocage à
+       * la main depuis /admin, ensuite la porte automatique. Voici la porte.
+       *
+       * ⭐⭐⭐ ELLE EXIGE UN **SECOND SECRET**, ET C'EST LE CŒUR DE SA
+       * CONCEPTION. Le bloc `/api/` est gardé par `ID_SERVICE`, un secret
+       * PARTAGÉ AVEC LES JEUX — le fichier A_LIRE du dépôt le dit en toutes
+       * lettres : « le MÊME secret de service ». Or, mesuré sur les routes
+       * existantes, ce secret seul ne permet AUCUNE action sur un compte qui
+       * existe : `/api/supprimer`, `/api/deconnexion` et `/api/passerelle`
+       * exigent tous, EN PLUS, le `sid` de la personne. Le secret dit « tu es
+       * un service », jamais « tu es cette personne ».
+       * ⇒ Poser ici une écriture sous le seul `ID_SERVICE` donnerait à chaque
+       *   jeu le pouvoir de s'accorder des abonnements. `ID_CAISSE` est connu
+       *   du seul site marchand.
+       *
+       * ⛔ SANS `ID_CAISSE` CONFIGURÉ, LA ROUTE N'EXISTE PAS — 404, comme une
+       *    adresse inconnue. ⚠️ Et surtout PAS 401 : un 401 annoncerait
+       *    « il y a une caisse ici, trouve la clé ». Une porte qu'on n'a pas
+       *    ouverte ne doit pas se signaler. C'est déjà le choix fait pour
+       *    `/admin`, et pour la même raison.
+       *
+       * 🔴 LE LOT 141 DIT « veveprice ne doit pas DÉSIGNER un compte », ET IL
+       *    A RAISON — POUR LA LECTURE. Son argument, écrit trente lignes plus
+       *    bas : « avec le secret de service, il pourrait alors les parcourir
+       *    tous ». C'est un risque de DIVULGATION. Cette route-ci ne rend
+       *    AUCUNE donnée du compte : ni adresse, ni portefeuille, ni avoirs,
+       *    ni même le palier obtenu. Désigner un identifiant n'apprend donc
+       *    rien sur personne — on ne peut qu'OFFRIR un abonnement, ce qui
+       *    n'expose rien. *Un argument juste ne s'applique pas partout : on
+       *    vérifie ce qu'il protège avant de l'invoquer.*
+       *
+       * ⚠️ Le webhook d'un prestataire n'a PAS de cookie. Sa signature est son
+       *    authentification, et elle se vérifie CHEZ LE SITE MARCHAND, qui
+       *    seul connaît le prestataire. Ce service ne connaît aucun
+       *    prestataire, et c'est voulu : le jour où Preda en change, rien ici
+       *    ne bouge.
+       */
+      if (m === 'POST' && p === '/api/abonner') {
+        const caisse = (process.env.ID_CAISSE ?? '').trim();
+        if (!caisse) return json(res, { erreur: 'route inconnue' }, 404);
+        const fourniCaisse = String(req.headers['x-caisse'] ?? '');
+        // ⭐ `memeSecret` — comparaison à durée constante, comme au-dessus. Une
+        //   comparaison naïve laisse deviner le secret caractère par caractère.
+        if (!memeSecret(fourniCaisse, caisse)) return json(res, { erreur: 'refusé' }, 401);
+        if (trop(REGLES.api)) return json(res, { erreur: 'trop de requêtes' }, 429);
+        const b = await jsonDe(req);
+        const bilan = honorerPaiement(
+          String(b.reference ?? ''), String(b.compte ?? ''),
+          Number(b.jours ?? 0), String(b.palier ?? ''));
+        // ⛔ LA TRACE DIT LE PALIER ET LA DURÉE, JAMAIS LE COMPTE NI LA
+        //   RÉFÉRENCE : la référence d'un paiement désigne une transaction
+        //   réelle chez le prestataire. Même règle que la recherche d'/admin.
+        console.log(`[caisse] paiement (${String(b.palier ?? '?')}, ${Number(b.jours ?? 0)} j)`
+          + `${bilan.rejeu ? ' REJEU' : ''} : ${bilan.message}`);
+        // ⭐ 200 SUR UN REJEU, ET C'EST DÉLIBÉRÉ : un prestataire qui reçoit
+        //   une erreur RÉESSAIE, indéfiniment. « C'est déjà fait » l'arrête.
+        return json(res, { ok: bilan.ok, rejeu: bilan.rejeu, message: bilan.message },
+          bilan.ok ? 200 : 400);
       }
 
       /**
