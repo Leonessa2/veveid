@@ -261,6 +261,43 @@ CREATE TABLE IF NOT EXISTS paiements (
 );
 CREATE INDEX IF NOT EXISTS idx_paiements_compte ON paiements(compte_id);
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 🔔 LOT 201 — LES RAPPELS AVANT EXPIRATION, ET LA CLE QUI LES REND UNIQUES
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ⭐⭐⭐ LA CLE PRIMAIRE EST (compte, ECHEANCE), ET C'EST TOUT LE MECANISME.
+-- Une tache qui cherche chaque jour les abonnements finissant dans cinq jours
+-- retrouve les MEMES comptes cinq jours de suite. Sans marque, un client qui
+-- paie recoit cinq fois le meme courriel.
+--   . (compte, jour) n'empecherait que le doublon du meme jour ;
+--   . (compte) seul le priverait de rappel POUR TOUJOURS, y compris l'an
+--     prochain — un silence qui ne se voit qu'au non-renouvellement.
+--   . (compte, echeance) fait les deux : tant que la date de fin ne bouge pas
+--     le rappel ne repart pas, et des qu'il renouvelle l'echeance CHANGE, donc
+--     la cle change, donc le rappel se rearme seul. Rien a purger, rien a
+--     remettre a zero.
+-- ⭐ Meme discipline que la table des paiements : c'est la base qui refuse le doublon, en
+--    une operation indivisible — pas un SELECT suivi d'un INSERT, que deux
+--    passages simultanes franchiraient tous les deux.
+-- ⚠️ la colonne du drapeau n'est pas un confort : la marque est posee AVANT l'envoi (voir
+--    rappels.ts), donc sans ce drapeau un rappel marque mais jamais parti
+--    ressemblerait exactement a un rappel reussi.
+-- ⛔ AUCUNE ADRESSE ICI : elle vit dans la table des comptes, et une copie serait une
+--    seconde verite a tenir.
+-- 🔴🔴🔴 SIXIEME FOIS : L'ACCENT GRAVE DE CE BLOC A CASSE LA COMPILATION.
+--    Tout ce fichier SQL est un gabarit de chaine JavaScript, que l'accent
+--    grave FERME. Le commentaire vingt lignes plus haut le dit — et je l'ai
+--    quand meme cite pour nommer une table. L'erreur rendue parle d'un
+--    point-virgule manquant, a 278 lignes de la vraie cause.
+--    ⭐⭐⭐ ON DECRIT, ON NE CITE JAMAIS. Une regle qu'on relit sans
+--    l'appliquer est une regle qu'on n'a pas lue.
+CREATE TABLE IF NOT EXISTS rappels (
+  compte_id TEXT NOT NULL,
+  echeance TEXT NOT NULL,
+  envoye_le TEXT NOT NULL,
+  ok INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (compte_id, echeance)
+);
+
 -- ⭐⭐ LES LIENS DE CONNEXION (lot 89).
 --
 -- 🔴 ON N'ENREGISTRE PAS LE JETON, ON ENREGISTRE SON EMPREINTE. Le jeton

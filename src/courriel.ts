@@ -225,3 +225,58 @@ export function courrielDeConnexion(a: string, lien: string, minutes: number, no
 const echapperAttribut = (s: string) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/**
+ * 🔔 LOT 201 — LE RAPPEL AVANT EXPIRATION.
+ *
+ * ⭐⭐⭐ IL NE FAIT PAS PEUR, ET C'EST UNE DÉCISION. « Votre accès va être
+ * coupé » est vrai et hostile ; la personne a payé, elle n'a rien fait de mal,
+ * et son accès ne se coupe pas — il arrive au bout. Le courriel dit la date,
+ * dit ce qui reste ouvert après (le compte gratuit, les favoris), et donne un
+ * lien. ⛔ Aucun compte à rebours, aucune urgence fabriquée.
+ *
+ * ⚠️ IL NE PROMET PAS DE RECONDUCTION AUTOMATIQUE, parce qu'il n'y en a pas :
+ * la caisse encaisse un virement, elle ne prélève rien. Le dire clairement
+ * ici évite la seule mauvaise surprise possible — croire que c'est reconduit.
+ *
+ * ⛔ ET IL N'Y A AUCUN LIEN DE DÉSABONNEMENT. Ce n'est pas une lettre
+ * d'information : c'est un message de service sur un abonnement en cours, au
+ * même titre qu'un lien de connexion. Un lien de désinscription y ferait
+ * croire qu'on peut refuser d'être prévenu de la fin de ce qu'on a payé.
+ */
+export function courrielDeRappel(a: string, jours: number, finISO: string, lien: string): Message {
+  // ⚠️ La date se rend en clair, dans la langue du service (français) : un
+  //    horodatage ISO au milieu d'une phrase ne se lit pas.
+  const date = finISO.slice(0, 10).split('-').reverse().join('/');
+  const combien = jours <= 1 ? 'demain' : `dans ${jours} jours`;
+  const sujet = `Votre accès VeVePrice se termine ${combien}`;
+  const texte = [
+    `Votre accès VeVePrice se termine ${combien}, le ${date}.`,
+    '',
+    "Il ne se reconduit pas tout seul : nous n'avons aucun prélèvement en place.",
+    'Pour prolonger, tout se passe sur votre compte :',
+    lien,
+    '',
+    'Après cette date, votre compte reste ouvert et vos favoris sont conservés.',
+    'Seules les données réservées aux abonnés se referment.',
+  ].join('\n');
+  const html = `<!doctype html><html lang="fr"><meta charset="utf-8">
+<body style="margin:0;padding:24px;background:#14161b;color:#e6e3dc;font:16px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+  <div style="max-width:520px;margin:0 auto">
+    <p style="margin:0 0 18px">Votre accès <b>VeVePrice</b> se termine ${combien}, le <b>${date}</b>.</p>
+    <p style="margin:0 0 18px;color:#9aa0ab">Il ne se reconduit pas tout seul : nous n'avons aucun prélèvement en place.</p>
+    <p style="margin:0 0 22px">
+      <a href="${echapperAttribut(lien)}"
+         style="display:inline-block;background:#c9a227;color:#1a1408;text-decoration:none;
+                font-weight:600;padding:14px 22px;border-radius:10px">Prolonger mon accès</a>
+    </p>
+    <p style="margin:0 0 8px;color:#9aa0ab;font-size:.9rem">
+      Si le bouton ne fonctionne pas, copiez cette adresse :<br>
+      <span style="word-break:break-all">${echapperAttribut(lien)}</span></p>
+    <p style="margin:0;color:#9aa0ab;font-size:.9rem">
+      Après cette date, votre compte reste ouvert et vos favoris sont conservés.
+      Seules les données réservées aux abonnés se referment.</p>
+  </div>
+</body></html>`;
+  return { a, sujet, texte, html };
+}

@@ -30,10 +30,14 @@ import {
   honorerPaiement,
 } from './src/avoirs.ts';
 import { demander, consommer, purgerLiens, DUREE_MIN } from './src/lien_magique.ts';
+// 🔔 LOT 201 — le rappel avant expiration.
+import {
+  passerLesRappels, etatDesRappels, joursRestants, JOURS_AVANT, type Echeant,
+} from './src/rappels.ts';
 import {
   creerCode, echanger, etatDeLaSession, revoquer, revoquerTout, purgerSessions,
 } from './src/sessions.ts';
-import { envoyer, courrielDeConnexion, dernierEnvoi, expediteur } from './src/courriel.ts';
+import { envoyer, courrielDeConnexion, dernierEnvoi, expediteur, courrielDeRappel } from './src/courriel.ts';
 import { CHAMP_PIEGE, verdict as verdictRobot, adresseRelayee } from './src/robots.ts';
 import { signer, memeSecret, fabriquerCles } from './src/jetons.ts';
 import { jeux, jeuConnu, retourAutorise, origineDe } from './src/jeux.ts';
@@ -146,6 +150,17 @@ export const serveur = createServer(async (req, res) => {
       },
       sites: [...jeux().keys()],
       /**
+       * 🔔 LOT 201 — LES RAPPELS SORTENT PAR ICI, ET C'EST LE SEUL CANAL QUI
+       * ATTEINT LE LECTEUR. Un `console.log` du minuteur va dans le journal du
+       * CONTENEUR : il faut ouvrir Coolify, trouver le bon onglet, et savoir
+       * quoi chercher. `/sante` répond à une adresse qu'on tape.
+       * ⭐ `partis` et `ratés` séparés : la marque étant posée AVANT l'envoi,
+       *   un rappel raté est un rappel PERDU pour cette échéance — c'est le
+       *   seul chiffre de ce bloc qui demande une action.
+       * ⛔ Aucune adresse, aucun identifiant : cette route est publique.
+       */
+      rappels: etatDesRappels(),
+      /**
        * 🔥 LOT 108 — CE QUE LA BASE DÉCLARE, DE L'EXTÉRIEUR, EN UNE REQUÊTE.
        *
        * CE QUE SON ABSENCE A COÛTÉ LE 07/08 : après le dépôt du lot 107, la
@@ -192,7 +207,24 @@ export const serveur = createServer(async (req, res) => {
       if (trop(REGLES.api)) return json(res, { erreur: 'trop de requêtes' }, 429);
       const e = etatDeLaSession(decodeURIComponent(p.slice('/session/'.length)));
       if (!e.palier) return json(res, { erreur: 'session inconnue' }, 404);
-      return json(res, { palier: e.palier });
+      /**
+       * 🔔 LOT 201 — `jours_restants` REJOINT LE PALIER, ET AUCUNE ROUTE N'EST
+       * CRÉÉE. La bannière de `/compte/` a besoin d'un chiffre ; le middleware
+       * de veve-sites appelle DÉJÀ cette route à chaque page rendue à la
+       * demande. Une route neuve aurait coûté une déclaration ici, une dans
+       * nginx, et une chez Cloudflare — pour un entier.
+       *
+       * ⭐⭐⭐ ET ÇA NE CASSE PAS L'INVARIANT ÉCRIT AU-DESSUS. Le commentaire de
+       * cette route dit : « elle ne rend rien qui identifie quelqu'un ; le jour
+       * où elle rendra l'adresse, il faudra la fermer ». Un nombre de jours
+       * n'identifie personne — pas plus que le palier qui sort déjà d'ici. Ce
+       * qu'il faut ne JAMAIS ajouter, c'est l'adresse, le nom, ou l'identifiant
+       * de compte.
+       * ⚠️ `null` quand la personne n'est pas abonnée : `0` voudrait dire « ça
+       * se termine aujourd'hui », ce qui est une tout autre phrase à l'écran.
+       */
+      const fin = e.compte ? lireCompte(e.compte)?.abonne_jusqu_a ?? null : null;
+      return json(res, { palier: e.palier, jours_restants: joursRestants(fin) });
     }
 
     /**
@@ -1205,6 +1237,43 @@ export function demarrer(port = PORT): void {
       if (n) console.log(`[identité] ${n} compte(s) effacé(s) après le délai de grâce.`);
     }, 3600_000);
     menage.unref?.();
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔔 LOT 201 — LE PASSAGE DES RAPPELS
+    // ═══════════════════════════════════════════════════════════════════════
+    // ⭐ TOUTES LES SIX HEURES, ET UNE FOIS TRENTE SECONDES APRÈS LE DÉMARRAGE.
+    //   Pas de cron externe : ce service est un processus qui tourne en
+    //   permanence, et ajouter un planificateur serait un second endroit où
+    //   l'état vit. ⛔ Quatre passages par jour au lieu d'un ne multiplient
+    //   RIEN : la clé (compte, échéance) fait que le deuxième passage de la
+    //   journée ne trouve plus personne. C'est la marque qui borne les envois,
+    //   jamais la fréquence — et une fréquence sur laquelle on compterait
+    //   serait fausse au premier redéploiement.
+    // ⚠️ LES REDÉPLOIEMENTS SONT FRÉQUENTS, donc le démarrage l'est aussi : le
+    //   passage « 30 s après le boot » repartirait à chaque déploiement. Il ne
+    //   renvoie rien pour la même raison.
+    // 🔴 `unref()` COMME LE MÉNAGE : un minuteur référencé empêcherait le
+    //   processus de s'arrêter sur SIGTERM, et Coolify finirait par le tuer.
+    const envoyerRappel = async (e: Echeant) => {
+      const base = (process.env.URL_PUBLIQUE || '').replace(/\/+$/, '');
+      // ⭐ Le lien mène à l'ANCRE de la caisse : `/compte/#caisse`, exactement
+      //   là où `offer.url` du manifeste envoie déjà les trois autres appels à
+      //   l'action. Une quatrième destination pour le même geste serait une
+      //   quatrième à tenir.
+      const lien = base ? `${base}/compte/#caisse` : 'https://veveprice.com/compte/#caisse';
+      const r = await envoyer(courrielDeRappel(e.email, e.jours, e.abonne_jusqu_a, lien));
+      return Boolean(r.ok);
+    };
+    const passer = () => {
+      passerLesRappels(envoyerRappel).then((b) => {
+        if (b.vus || b.cause) {
+          console.log(`[rappels] ${b.vus} échéance(s) à ${JOURS_AVANT} j — ${b.envoyes} envoyé(s), ${b.rates} raté(s)${b.cause ? ` — ⛔ ${b.cause}` : ''}`);
+        }
+      });
+    };
+    setTimeout(passer, 30_000).unref?.();
+    const rappels = setInterval(passer, 6 * 3600_000);
+    rappels.unref?.();
   });
   const stop = () => { purgerSeaux(); serveur.close(); fermerBase(); setTimeout(() => process.exit(0), 500).unref(); };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
