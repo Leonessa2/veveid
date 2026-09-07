@@ -195,24 +195,19 @@ export function courrielDeConnexion(a: string, lien: string, minutes: number, no
     '',
     "Si vous n'avez rien demandé, ignorez ce message : personne ne peut entrer sans ce lien.",
   ].join('\n');
-  const html = `<!doctype html><html lang="fr"><meta charset="utf-8">
-<body style="margin:0;padding:24px;background:#14161b;color:#e6e3dc;font:16px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
-  <div style="max-width:520px;margin:0 auto">
-    <p style="margin:0 0 18px">${nouveau ? 'Bienvenue sur <b>VeVePrice</b>.' : 'Vous avez demandé à vous connecter.'}</p>
-    <p style="margin:0 0 22px">
-      <a href="${echapperAttribut(lien)}"
-         style="display:inline-block;background:#c9a227;color:#1a1408;text-decoration:none;
-                font-weight:600;padding:14px 22px;border-radius:10px">Entrer sur VeVePrice</a>
-    </p>
-    <p style="margin:0 0 8px;color:#9aa0ab;font-size:.9rem">
-      Ce lien est valable ${minutes} minutes et ne fonctionne qu'une seule fois.</p>
-    <p style="margin:0 0 18px;color:#9aa0ab;font-size:.9rem">
-      Si le bouton ne fonctionne pas, copiez cette adresse :<br>
-      <span style="word-break:break-all">${echapperAttribut(lien)}</span></p>
-    <p style="margin:0;color:#9aa0ab;font-size:.9rem">
-      Si vous n'avez rien demandé, ignorez ce message : personne ne peut entrer sans ce lien.</p>
-  </div>
-</body></html>`;
+  const html = enveloppe(
+    `<p style="margin:0 0 6px;font:700 17px/1.35 ${POLICE};color:${ENCRE}">`
+    + `${nouveau ? 'Bienvenue sur VeVePrice' : 'Votre lien de connexion'}</p>`
+    + `<p style="margin:0 0 14px;color:${ENCRE_2}">`
+    + `Ouvrez ce lien pour entrer. Il est valable <b style="color:${ENCRE}">${minutes} minutes</b>`
+    + ` et ne fonctionne qu'une seule fois.</p>`
+    + bouton(lien, 'Entrer sur VeVePrice')
+    + `<p style="margin:0 0 14px;font-size:12px;color:${ENCRE_2}">`
+    + `Si le bouton ne fonctionne pas, copiez cette adresse :<br>`
+    + `<span style="word-break:break-all;color:${LIEN}">${echapperAttribut(lien)}</span></p>`
+    + `<p style="margin:0;font-size:12px;color:${ENCRE_2}">`
+    + `Si vous n'avez rien demandé, ignorez ce message : personne ne peut entrer sans ce lien.</p>`,
+  );
   return { a, sujet: titre, texte, html };
 }
 
@@ -222,6 +217,85 @@ export function courrielDeConnexion(a: string, lien: string, minutes: number, no
  *    quand même : le jour où un paramètre viendra d'ailleurs, la protection
  *    sera déjà là plutôt qu'à écrire.
  */
+/**
+ * ⚠️ VeVePreda/veveid — L'ENVELOPPE DES COURRIELS  (LOT J, 07/09/2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * LA CHARTE DE VEVEPRICE, DANS LA SEULE SURFACE DU PROJET OÙ « VALEUR EN DUR »
+ * EST LA BONNE RÉPONSE.
+ *
+ * 🔴 CE QUI A CHANGÉ, ET POURQUOI. Les deux courriels partaient en `#14161b`
+ * (un anthracite bleuté) avec un bouton OR `#c9a227` — une charte qui n'est
+ * celle d'aucun des deux sites. Un message est souvent le PREMIER objet de la
+ * marque qu'une personne voit ; il ne peut pas être le seul à parler une autre
+ * langue visuelle.
+ *
+ * ⛔⛔ ET LE CYAN DE LA MARQUE EST INTERDIT SUR FOND CLAIR. `#10CEF2` sur
+ * blanc mesure **1,38:1** — illisible, et pas « presque » : c'est quatre fois
+ * moins que le minimum. C'est `#0B798F` qui sert dès qu'il y a du clair
+ * dessous (5,1:1 en texte, 5,3:1 en fond sous du blanc). Le cyan garde
+ * l'en-tête sombre, où il est à sa place.
+ *
+ * ⛔ PAS DE VARIABLES CSS, PAS DE `flex`, PAS DE POLICE AUTO-HÉBERGÉE — un
+ * client mail n'en garantit aucun. Des `<table>`, des valeurs en dur et des
+ * polices système. ⚠️ C'est la seule surface du projet où cette phrase est
+ * vraie : partout ailleurs, une valeur en dur est un défaut.
+ *
+ * ⛔ ET AUCUNE IMAGE. Pas de Floora ici : la table `POSE_DE` (côté veve-sites)
+ * n'assigne AUCUNE pose au lien de connexion ni au rappel — lui en inventer
+ * une serait le premier pas vers « on met celle qui va bien » — et une image
+ * distante est bloquée par défaut chez la moitié des clients mail. Le
+ * mot-marque est donc dessiné en HTML, pas chargé.
+ *
+ * ⛔ NON MESURÉ, ET IL FAUT LE DIRE : le rendu réel dans Outlook, Gmail et
+ * Apple Mail. Ce fichier respecte les contraintes connues de ces clients ; il
+ * n'a été vu dans aucun.
+ */
+const NOIR = '#1A1A1A';
+const CYAN = '#10CEF2';
+const PAPIER = '#F4F4F2';
+const ENCRE = '#1A1A1A';
+const ENCRE_2 = '#4A4A4A';
+const ENCRE_3 = '#6A6A6A';
+const LIEN = '#0B798F';
+const POLICE = "Arial, Helvetica, sans-serif";
+
+/** Le pied légal, identique aux deux messages : ⛔ il ne se recopie pas. */
+const PIED = `Aucun wallet n'est connecté, aucune clé n'est demandée.<br>`
+  + `Ceci n'est pas un conseil financier. Non affilié à VeVe / ECOMI.`;
+
+/** Le bouton d'action. ⭐ Un `<a>` dans une `<td>` : Outlook ignore le
+ *  `border-radius` mais garde le fond et le rembourrage — le bouton reste un
+ *  bouton, seulement carré. C'est la dégradation qu'on accepte. */
+const bouton = (lien: string, libelle: string) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px">`
+  + `<tr><td style="background:${LIEN};border-radius:999px">`
+  + `<a href="${echapperAttribut(lien)}" style="display:inline-block;padding:12px 24px;`
+  + `font:700 13.5px/1.2 ${POLICE};color:#FFFFFF;text-decoration:none">${libelle}</a>`
+  + `</td></tr></table>`;
+
+/** L'enveloppe complète : l'en-tête de marque, le corps, le pied légal. */
+function enveloppe(corps: string): string {
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">`
+    + `<meta name="viewport" content="width=device-width,initial-scale=1"></head>`
+    + `<body style="margin:0;padding:0;background:${PAPIER}">`
+    + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"`
+    + ` style="background:${PAPIER}"><tr><td align="center" style="padding:0">`
+    + `<table role="presentation" width="420" cellpadding="0" cellspacing="0" border="0"`
+    + ` style="width:420px;max-width:100%">`
+    // ── l'en-tête sombre : la seule place du cyan
+    + `<tr><td style="background:${NOIR};padding:16px 22px">`
+    + `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>`
+    + `<td style="background:${CYAN};color:${NOIR};width:26px;height:26px;border-radius:7px;`
+    + `text-align:center;font:800 11px/26px ${POLICE}">VP</td>`
+    + `<td style="padding-left:10px;font:800 14px/1.2 ${POLICE};letter-spacing:.06em;`
+    + `color:#FFFFFF">VEVE PRICE</td>`
+    + `</tr></table></td></tr>`
+    // ── le corps clair
+    + `<tr><td style="padding:22px;font:14px/1.6 ${POLICE};color:${ENCRE}">${corps}`
+    + `<p style="margin:14px 0 0;font:11.5px/1.6 ${POLICE};color:${ENCRE_3}">${PIED}</p>`
+    + `</td></tr></table></td></tr></table></body></html>`;
+}
+
 const echapperAttribut = (s: string) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -260,23 +334,19 @@ export function courrielDeRappel(a: string, jours: number, finISO: string, lien:
     'Après cette date, votre compte reste ouvert et vos favoris sont conservés.',
     'Seules les données réservées aux abonnés se referment.',
   ].join('\n');
-  const html = `<!doctype html><html lang="fr"><meta charset="utf-8">
-<body style="margin:0;padding:24px;background:#14161b;color:#e6e3dc;font:16px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
-  <div style="max-width:520px;margin:0 auto">
-    <p style="margin:0 0 18px">Votre accès <b>VeVePrice</b> se termine ${combien}, le <b>${date}</b>.</p>
-    <p style="margin:0 0 18px;color:#9aa0ab">Il ne se reconduit pas tout seul : nous n'avons aucun prélèvement en place.</p>
-    <p style="margin:0 0 22px">
-      <a href="${echapperAttribut(lien)}"
-         style="display:inline-block;background:#c9a227;color:#1a1408;text-decoration:none;
-                font-weight:600;padding:14px 22px;border-radius:10px">Prolonger mon accès</a>
-    </p>
-    <p style="margin:0 0 8px;color:#9aa0ab;font-size:.9rem">
-      Si le bouton ne fonctionne pas, copiez cette adresse :<br>
-      <span style="word-break:break-all">${echapperAttribut(lien)}</span></p>
-    <p style="margin:0;color:#9aa0ab;font-size:.9rem">
-      Après cette date, votre compte reste ouvert et vos favoris sont conservés.
-      Seules les données réservées aux abonnés se referment.</p>
-  </div>
-</body></html>`;
+  const html = enveloppe(
+    `<p style="margin:0 0 6px;font:700 17px/1.35 ${POLICE};color:${ENCRE}">`
+    + `Votre accès se termine ${combien}</p>`
+    + `<p style="margin:0 0 14px;color:${ENCRE_2}">`
+    + `Il prend fin le <b style="color:${ENCRE}">${date}</b>, et il ne se reconduit pas tout seul :`
+    + ` nous n'avons aucun prélèvement en place.</p>`
+    + bouton(lien, 'Prolonger mon accès')
+    + `<p style="margin:0 0 14px;font-size:12px;color:${ENCRE_2}">`
+    + `Si le bouton ne fonctionne pas, copiez cette adresse :<br>`
+    + `<span style="word-break:break-all;color:${LIEN}">${echapperAttribut(lien)}</span></p>`
+    + `<p style="margin:0;font-size:12px;color:${ENCRE_2}">`
+    + `Après cette date, votre compte reste ouvert et vos favoris sont conservés.`
+    + ` Seules les données réservées aux abonnés se referment.</p>`,
+  );
   return { a, sujet, texte, html };
 }
