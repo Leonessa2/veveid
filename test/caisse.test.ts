@@ -1,4 +1,4 @@
-// ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : test/caisse.test.ts   (FICHIER NEUF — lot 198)
+// ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : test/caisse.test.ts   (FICHIER NEUF — lot 198)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';

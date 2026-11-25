@@ -1,4 +1,4 @@
-// ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : test/migration_journal.test.ts
+// ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : test/migration_journal.test.ts
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';

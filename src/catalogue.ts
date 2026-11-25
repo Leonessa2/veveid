@@ -25,7 +25,7 @@ import { gunzipSync } from 'node:zlib';
  *    `name_display` : mesuré, il ne retrouve rien (0 sur 75).
  */
 export const CATALOGUE_URL = process.env.CATALOGUE_URL
-  || 'https://github.com/fanablefrance/jetonveve/releases/download/catalogue/catalogue.csv.gz';
+  || 'https://github.com/Leonessa2/jetonveve/releases/download/catalogue/catalogue.csv.gz';
 
 /** Une journée : ce fichier bouge au rythme des drops, pas des minutes. */
 export const TTL_MS = 24 * 3600_000;

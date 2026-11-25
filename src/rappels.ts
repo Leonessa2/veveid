@@ -1,4 +1,4 @@
-// ⚠️ VeVePreda/veveid — src/rappels.ts   (FICHIER NEUF — lot 201)
+// ⚠️ Leonessa2/veveid — src/rappels.ts   (FICHIER NEUF — lot 201)
 // ═══════════════════════════════════════════════════════════════════════════
 //  LE RAPPEL AVANT EXPIRATION — un seul courriel, jamais cinq
 // ═══════════════════════════════════════════════════════════════════════════

@@ -218,7 +218,7 @@ export function courrielDeConnexion(a: string, lien: string, minutes: number, no
  *    sera déjà là plutôt qu'à écrire.
  */
 /**
- * ⚠️ VeVePreda/veveid — L'ENVELOPPE DES COURRIELS  (LOT J, 07/09/2026)
+ * ⚠️ Leonessa2/veveid — L'ENVELOPPE DES COURRIELS  (LOT J, 07/09/2026)
  * ═══════════════════════════════════════════════════════════════════════════
  * LA CHARTE DE VEVEPRICE, DANS LA SEULE SURFACE DU PROJET OÙ « VALEUR EN DUR »
  * EST LA BONNE RÉPONSE.

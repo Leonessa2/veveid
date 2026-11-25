@@ -1,4 +1,4 @@
-# ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : Dockerfile
+# ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : Dockerfile
 # Node 22 exécute le TypeScript nativement : aucune étape de build, aucune
 # dépendance à installer. C'est le principe fondateur du projet — chaque
 # dépendance évitée est une panne de déploiement évitée.

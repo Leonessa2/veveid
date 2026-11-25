@@ -1,9 +1,9 @@
-# ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : .github/workflows/bancs.yml
+# ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : .github/workflows/bancs.yml
 #
 # 🔴🔴 POURQUOI CE FICHIER EXISTE — MESURÉ LE 12/08/2026
 #
-#   GET /repos/VeVePreda/veveid/actions/runs  ->  "total_count": 0
-#   GET /repos/VeVePreda/veveid/contents/.github/workflows  ->  404
+#   GET /repos/Leonessa2/veveid/actions/runs  ->  "total_count": 0
+#   GET /repos/Leonessa2/veveid/contents/.github/workflows  ->  404
 #
 # Ce dépôt porte 144 bancs. AUCUNE MACHINE NE LES A JAMAIS JOUÉS. Ils ne
 # tournent que si quelqu'un tape la commande à la main, et le Dockerfile ne

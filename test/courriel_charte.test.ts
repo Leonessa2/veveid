@@ -1,4 +1,4 @@
-// ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : test/courriel_charte.test.ts   (FICHIER NEUF — lot J)
+// ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : test/courriel_charte.test.ts   (FICHIER NEUF — lot J)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { courrielDeConnexion, courrielDeRappel } from '../src/courriel.ts';

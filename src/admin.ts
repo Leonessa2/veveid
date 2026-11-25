@@ -1,4 +1,4 @@
-// ⚠️ DEPOT : VeVePreda/veveid   ·   CHEMIN : src/admin.ts
+// ⚠️ DEPOT : Leonessa2/veveid   ·   CHEMIN : src/admin.ts
 /**
  * 🔥 LOT 108 — REGARDER LE SERVICE. Rien d'autre.
  *
